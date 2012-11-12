@@ -1,4 +1,4 @@
-PORT=/dev/ttyUSB0
+PORT=USB #/dev/ttyUSB0
 MCU=atmega8
 CC=avr-gcc
 OBJCOPY=avr-objcopy
@@ -22,7 +22,7 @@ $(PROJECT).s : $(PROJECT).c
 # you need to erase first before loading the program.
 # load (program) the software into the eeprom:
 load: $(PROJECT).hex
-	avrdude -p $(MCU) -c stk500v1 -P $(PORT) -b 19200 -U flash:w:$(PROJECT).hex:a
+	avrdude -p $(MCU) -c usbasp -P $(PORT) -b 19200 -U flash:w:$(PROJECT).hex:a
 #-------------------
 clean:
 	rm -f *.o *.map *.out *.s
