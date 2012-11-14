@@ -1,17 +1,19 @@
-PORT=USB #/dev/ttyUSB0
+PORT=usb #/dev/ttyUSB0
 MCU=atmega8
 CC=avr-gcc
 OBJCOPY=avr-objcopy
 PROJECT=main
 ISINT=INTERRUPT
-F_CPU=1000000
+F_CPU=14745600
+#1000000
 
 # optimize for size:
-CFLAGS=-g -mmcu=$(MCU) -Wall -Wstrict-prototypes -Os -mcall-prologues
+CFLAGS=-mmcu=$(MCU) -Wall -Wstrict-prototypes -Os -mcall-prologues #-Wl,-u,vfprintf -lprintf_flt -lm
 #-------------------
 all: $(PROJECT).hex
 #-------------------
 $(PROJECT).hex : $(PROJECT).out
+	avr-strip $(PROJECT).out
 	$(OBJCOPY) -R .eeprom -O ihex $(PROJECT).out $(PROJECT).hex
 $(PROJECT).out : $(PROJECT).o
 	$(CC) $(CFLAGS) -o $(PROJECT).out -Wl,-Map,$(PROJECT).map $(PROJECT).o
