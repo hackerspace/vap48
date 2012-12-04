@@ -5,9 +5,9 @@
 #include <stdio.h>
 
 const float dt = 0.75; // miliseconds
-const float Kp = 25.0;
-const float Ki = 0.6;
-const float Kd = 0.3;
+const float Kp = 10.0; //25.0;
+const float Ki = 0.3;
+const float Kd = 0.7;
 
 float setpoint = 215;
 
@@ -35,6 +35,8 @@ void wait(int ms) {
  * 182 == 46k2
  * 99  == 92k2
 */
+
+//int _old_adc_value;
 
 #define T1 (273.15+25.0)
 #define R1 100000.0
@@ -79,20 +81,60 @@ int adc_get(char channel) {
 
   ADCSRA  |= (1<<ADSC); // Start conversion
   while (ADCSRA &  (1<<ADSC));
-
   // wait until conversion  completes; ADSC=0 means Complete
   return ADCW; //return ADC result
 }
+/*
+float fxlog(float x_) {
+  int x;
 
-float measure(void) {
-  float Vout = adc_get(0);
+  // convert to fixed point, x \in (-32768, 32767)
+  x  = ((int)x_) << 16;
+  x += (x_ - (float)x) * (1 << 16);
+
+  int t,y;
+
+  y=0xa65af;
+  if(x<0x00008000) x<<=16,              y-=0xb1721;
+  if(x<0x00800000) x<<= 8,              y-=0x58b91;
+  if(x<0x08000000) x<<= 4,              y-=0x2c5c8;
+  if(x<0x20000000) x<<= 2,              y-=0x162e4;
+  if(x<0x40000000) x<<= 1,              y-=0x0b172;
+  t=x+(x>>1); if((t&0x80000000)==0) x=t,y-=0x067cd;
+  t=x+(x>>2); if((t&0x80000000)==0) x=t,y-=0x03920;
+  t=x+(x>>3); if((t&0x80000000)==0) x=t,y-=0x01e27;
+  t=x+(x>>4); if((t&0x80000000)==0) x=t,y-=0x00f85;
+  t=x+(x>>5); if((t&0x80000000)==0) x=t,y-=0x007e1;
+  t=x+(x>>6); if((t&0x80000000)==0) x=t,y-=0x003f8;
+  t=x+(x>>7); if((t&0x80000000)==0) x=t,y-=0x001fe;
+  x=0x80000000-x;
+  y-=x>>15;
+  return y;
+}*/
+
+int measure(void) {
+  static int bf[8], bfpos = 0;
+  bf[bfpos++] = adc_get(0);
+  if (bfpos>=8) bfpos = 0;
+  int i;
+  float Vout = 0;
+  for (i = 0; i < 8; i++)
+    Vout += bf[i];
+  Vout /= 8;
+  char x[8];
+  int kokot = ADCW;
+  sprintf(x, "[%d]\n\r", (int)Vout);
+  write(x);
+//  float Vout = adc_get(0);
+//  Vout = Vout - (Vout - _old_adc_value)/2;
+//  _old_adc_value = Vout;
   const float Vin = 1023; // "Volts"
-  const float pulldown = 10000.0; // ohms
+  const float pulldown = 10000; // ohms
 
   float R2 = pulldown * Vin / Vout - pulldown;
 
-  float T2 = T1 * Beta / logf(R1 / R2) / (Beta / logf(R1 / R2) - T1);
-  return T2 - 273.15;
+  float T2 = T1 * Beta / logf((float)R1 / R2) / (Beta / logf((float)R1 / R2) - T1);
+  return T2 - 273;
 }
 
 void init_fastpwm() {
@@ -113,7 +155,7 @@ void init_adc() {
   // Set ADCSRA Register with division factor 32
 }
 
-void pwm_set(float x) {
+void pwm_set(int x) {
   OCR2 = (int)x;
 }
 
@@ -122,31 +164,31 @@ int main(void) {
   init_adc();
   init_usart();
 
-  float previous_error = 0;
+  int previous_error = 0;
   float integral = 0;
   float time = 0;
 
   while(1) {
-    float measured_value = measure();
+    int measured_value = measure();
 //    setpoint = 240.0 * adc_get(1)/1023.0;
     setpoint = 160 + 80.0 * adc_get(1)/1023.0;
     char msg[64];
 
-    float error = setpoint - measured_value;
+    int error = setpoint - measured_value;
     integral = integral + error*dt;
-    float derivative = (error - previous_error)/dt;
-    float output = Kp*error + Ki*integral + Kd*derivative;
+    int derivative = (float)(error - previous_error)/dt;
+    int output = Kp*error + Ki*integral + Kd*derivative;
     previous_error = error;
 //    if (output > 250) output = 255;
 //    if (output <= 5) output = 0;
     int oout = output;
-    if (output > 127) output = output * 1.5;
+    if (output > 127) output = 39 + output * 0.7;
     if (output > 255) output = 255;
-    if (output < 127) output *= 2;
+    if (output < 127) output *= 1.5;
     if (output <= 0) output = 0;
 
     sprintf(msg, "t=%3d/%3d - o=%3d->%3d e=%3d d=%3d i=%3d | %d.%ds\n\r",
-        (int)measured_value, (int)setpoint, oout, (int)output, (int)(error*Kp),
+        (int)measured_value, (int)setpoint, /*_old_adc_value,*/ oout, (int)output, (int)(error*Kp),
         (int)(derivative*Kd), (int)(integral*Ki),
         (int)time, (int)(1000.0*time-(float)(1000*floor(time))));
     write(msg);
